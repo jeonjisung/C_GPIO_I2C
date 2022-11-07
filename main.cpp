@@ -3,7 +3,7 @@
 Serial pc(USBTX, USBRX);
 
 DigitalInOut sda(PB_9); // SDA
-DigitalInOut scl(PB_8); // SCL
+DigitalOut scl(PB_8);	// SCL
 
 int addr7bit = 0xB8;
 int addr8bit = 0xB9;
@@ -11,72 +11,85 @@ int ACK = 0;
 int NACK = 1;
 
 void i2c_write(unsigned char addr);
-void i2c_read(unsigned char ANN);
+unsigned char i2c_read(int ANN);
 void i2c_start();
 void i2c_end();
+void i2c_init();
 
 int main()
 {
+	char cmd[4];
+
 	pc.baud(9600);
-	pc.printf("Hello World!\n\r");
+	pc.printf("Hello World!12\n\r");
 	sda.output();
-	scl.output();
 	while (1)
 	{
+		i2c_init();
 		i2c_start();
 		i2c_write(addr7bit);
+		wait_us(40);
 		i2c_write(0x00);
+		wait_us(40);
+		i2c_start();
 		i2c_write(addr8bit);
-		i2c_read(ACK);
-		i2c_read(ACK);
-		i2c_read(ACK);
-		i2c_read(NACK);
+		wait_us(40);
+		cmd[0] = i2c_read(ACK);
+		cmd[1] = i2c_read(ACK);
+		cmd[2] = i2c_read(ACK);
+		cmd[3] = i2c_read(NACK);
 		i2c_end();
+
+		pc.printf("%d.%d\n\r", cmd[0], cmd[1]);
+		pc.printf("%d.%d\n\r", cmd[2], cmd[3]);
 		// i2c_write(addr8bit);
-		wait(0.100);
+		wait(2);
 	}
 }
 
-void i2c_start(){
-	scl.output();
+void i2c_init()
+{
 	sda.output();
-
-	sda = 1;
-	wait(0.00075);
-
 	scl = 1;
-	wait(0.00075);
-
-	sda = 0;
-	wait(0.00075);
-
-	scl = 0;
-	wait(0.00075);
+	sda = 1;
 }
 
-void i2c_end(){
-	scl.output();
+void i2c_start()
+{
 	sda.output();
-	
-	sda = 0;
-	wait(0.00075);
-
-	scl = 0;
-	wait(0.00075);
-
-	sda = 1;
-	wait(0.00075);
 
 	scl = 1;
-	wait(0.00075);
+	wait_us(40);
+
+	sda = 1;
+	wait_us(40);
+
+	sda = 0;
+	wait_us(40);
+
+	scl = 0;
+	wait_us(40);
+}
+
+void i2c_end()
+{
+	sda.output();
+
+	sda = 0;
+	wait_us(40);
+
+	scl = 1;
+	wait_us(40);
+
+	sda = 1;
+	wait_us(40);
 }
 
 void i2c_write(unsigned char addr)
 {
-	scl.output();
 	sda.output();
 	for (int i = 0; i < 8; i++)
-	{	
+	{
 		if ((addr & 0x80) == 0x80)
 		{
 			sda = 1;
@@ -87,49 +100,57 @@ void i2c_write(unsigned char addr)
 			sda = 0;
 			// pb9 = 0;
 		}
-		wait(0.00075);
-		addr = addr << 1;
 		scl = 1;
-		wait(0.00075);
+		wait_us(40);
+		addr = addr << 1;
 		scl = 0;
-		wait(0.00075);
+		wait_us(40);
 	}
+	sda = 0;
 
+	// read ack
 	sda.input();
-	
 	scl = 1;
-	wait(0.00075);
-	sda.output();
-	// wait(0.00075); // ACK
+	sda.read();
+	wait_us(40);
+	scl = 0;
+	wait_us(40);
 }
 
-void i2c_read(unsigned char ANN)
+unsigned char i2c_read(int ANN)
 {
 	unsigned char data;
 
-	scl.input();
-	sda.output();
+	sda.input();
 
 	for (int i = 0; i < 8; i++)
 	{
-		scl.read();
-		wait(0.00075);
-		sda = 0;
-		if (scl == 1)
+		wait_us(40);
+		scl = 1;
+		if (sda.read() == 1)
 		{
 			data = data | 0x01;
-			wait(0.00075);
 		}
-		else
+		else // sda.read() == 0
 		{
 			data = data | 0x00;
-			wait(0.00075);
 		}
-		pc.printf("%x", data);
+		wait_us(40);
+		scl = 0;
+		wait_us(40);
+		if (i == 7)
+			break;
+		data = data << 1;
 	}
-	scl.output();
-	wait(0.00075);
+
+	// read ack
+	sda.output();
+	wait_us(40);
+	scl = 1;
 	sda = ANN;
+	wait_us(40);
 	scl = 0;
-	pc.printf("\n\r", data);
+	wait_us(40);
+
+	return data;
 }
