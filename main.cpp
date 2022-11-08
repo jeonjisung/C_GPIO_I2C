@@ -7,11 +7,9 @@ DigitalOut scl(PB_8);	// SCL
 
 int addr7bit = 0xB8;
 int addr8bit = 0xB9;
-int ACK = 0;
-int NACK = 1;
 
 void i2c_write(unsigned char addr);
-unsigned char i2c_read(int ANN);
+void i2c_read(char *cmd);
 void i2c_start();
 void i2c_end();
 void i2c_init();
@@ -34,16 +32,16 @@ int main()
 		i2c_start();
 		i2c_write(addr8bit);
 		wait_us(40);
-		cmd[0] = i2c_read(ACK);
-		cmd[1] = i2c_read(ACK);
-		cmd[2] = i2c_read(ACK);
-		cmd[3] = i2c_read(NACK);
+		i2c_read(cmd);
+		// i2c_read(cmd, ACK);
+		// i2c_read(cmd, ACK);
+		// i2c_read(cmd, NACK);
 		i2c_end();
 
-		pc.printf("%d.%d\n\r", cmd[0], cmd[1]);
-		pc.printf("%d.%d\n\r", cmd[2], cmd[3]);
+		pc.printf("습도 : %d.%d\n\r", cmd[0], cmd[1]);
+		pc.printf("온도 : %d.%d\n\r", cmd[2], cmd[3]);
 		// i2c_write(addr8bit);
-		wait(2);
+		wait(1);
 	}
 }
 
@@ -74,6 +72,9 @@ void i2c_start()
 void i2c_end()
 {
 	sda.output();
+
+	scl = 0;
+	wait_us(40);
 
 	sda = 0;
 	wait_us(40);
@@ -117,40 +118,52 @@ void i2c_write(unsigned char addr)
 	wait_us(40);
 }
 
-unsigned char i2c_read(int ANN)
+void i2c_read(char *cmd)
 {
-	unsigned char data;
-
-	sda.input();
-
-	for (int i = 0; i < 8; i++)
+	int j = 0;
+	unsigned char data = 0;
+	while (j < 5)
 	{
+		data = 0;
+		sda.input();
+		for (int i = 0; i < 8; i++)
+		{
+			wait_us(40);
+			scl = 1;
+			if (sda.read() == 1)
+			{
+				data = data | 0x01;
+			}
+			else // sda.read() == 0
+			{
+				data = data | 0x00;
+			}
+			wait_us(40);
+			scl = 0;
+			wait_us(40);
+			if (i != 7)
+				data = data << 1;
+		}
+		cmd[j] = data;
+
 		wait_us(40);
+		// write ack
+		sda.output();
+		
+		if (j < 4)
+		{
+			sda = 0;
+		}
+		else
+		{
+			sda = 1;
+		}
+		
 		scl = 1;
-		if (sda.read() == 1)
-		{
-			data = data | 0x01;
-		}
-		else // sda.read() == 0
-		{
-			data = data | 0x00;
-		}
 		wait_us(40);
 		scl = 0;
 		wait_us(40);
-		if (i == 7)
-			break;
-		data = data << 1;
+
+		j++;
 	}
-
-	// read ack
-	sda.output();
-	wait_us(40);
-	scl = 1;
-	sda = ANN;
-	wait_us(40);
-	scl = 0;
-	wait_us(40);
-
-	return data;
 }
